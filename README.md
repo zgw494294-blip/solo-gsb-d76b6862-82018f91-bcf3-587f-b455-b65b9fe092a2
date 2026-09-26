@@ -1,6 +1,6 @@
 # 六点盲文排版台
 
-本地运行的英语一级（Grade 1）六点盲文转写与排版 Web 应用。
+本地运行的英语一级（Grade 1）六点盲文转写排版与识读 Web 应用。
 Python / FastAPI 后端 + 原生 HTML/CSS/JavaScript 前端，**无需外网、无前端构建步骤**。
 
 ## 一条命令启动
@@ -31,6 +31,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 ## 功能与转写规则
 
+### 盲文排版（原文 → 盲文）
+
 - **输入约束**
   - 不超过 500 个 ASCII 字符：仅字母、数字、空格、换行；
   - 至少包含一个字母或数字；
@@ -54,11 +56,22 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 - **页面**：原文行与盲文格逐行对照；每格显示六点矩阵、盲文字符与说明（悬停查看点位）；
   显示每行用格/余格、断词与数字续行统计；支持**下载 Unicode 盲文 `.txt`**、一键复制。
 
+### 盲文识读（盲文 → 原文）
+
+- **输入约束**：粘贴不超过 **500 格**的 Unicode 六点盲文，允许盲文空格（U+2800）与换行。
+- **识读规则**
+  - 字母沿用一级点位还原；**⠠（点 6）** 只把紧随的一个字母转为大写；
+  - **⠼（点 3456）** 使后续 a～i、j 点位分别读作 1～9、0，数字状态到词间格或普通换行结束；
+  - **⠤（点 36）** 仅作行尾断词标记：去掉该格及其后的换行并接续同一词；数字词续行须以 ⠼ 重新起始；普通换行保留。
+- **报错**：孤立标记、未定义点位、行内连字符与不合法的数字续行均**按盲文行、列定位**（点击错误可跳转），且不输出部分解读文本。
+- **页面**：顶部标签切换「盲文排版 / 盲文识读」两个视图；识读结果显示原文与格数/字符数/行数统计，支持一键复制。
+
 ## API
 
 | 方法 | 路径 | 说明 |
 | ---- | ---- | ---- |
 | `POST` | `/api/typeset` | 请求体 `{"text": "...", "width": 20}`，返回排版结果；输入非法时 HTTP 422，`errors` 含行/列定位 |
+| `POST` | `/api/decode` | 请求体 `{"text": "..."}`（Unicode 六点盲文，≤500 格），返回 `{"text": ...}` 识读结果；输入非法时 HTTP 422，`errors` 含盲文行/列定位，不返回部分结果 |
 | `GET` | `/api/health` | 健康检查 |
 
 例：
@@ -67,6 +80,10 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 curl -s -X POST http://localhost:8000/api/typeset \
   -H 'Content-Type: application/json' \
   -d '{"text":"Hello 2026","width":16}'
+
+curl -s -X POST http://localhost:8000/api/decode \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"⠠⠓⠑⠇⠇⠕⠀⠼⠃⠚⠃⠋"}'
 ```
 
 ## 离线说明
@@ -83,12 +100,15 @@ curl -s -X POST http://localhost:8000/api/typeset \
 │   ├── __init__.py
 │   ├── main.py            # FastAPI：接口与静态托管
 │   ├── braille.py         # 校验、转写与动态规划排版引擎
+│   ├── reader.py          # 盲文识读引擎（Unicode 盲文 → ASCII）
 │   └── static
-│       ├── index.html     # 页面结构
+│       ├── index.html     # 页面结构（排版 / 识读两个视图）
 │       ├── style.css      # 样式（盲文格六点矩阵）
 │       └── app.js         # 前端交互（原生 JS）
 ├── tests
-│   └── test_braille.py    # 引擎测试（含与独立 DP 的随机对照）
+│   ├── test_braille.py    # 排版引擎测试（含与独立 DP 的随机对照）
+│   ├── test_reader.py     # 识读引擎测试（含排版→识读往返对照）
+│   └── test_api.py        # 接口层测试
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
@@ -102,5 +122,5 @@ pip install pytest
 python3 -m pytest tests/ -q
 ```
 
-测试覆盖转写规则、报错定位、超宽词断行、数字续行标记、各优化目标优先级，
-并以独立实现的记忆化 DP 为基准做随机对照（不同宽度、长短词、大小写与数字混合）。
+测试覆盖转写规则、识读规则、报错定位、超宽词断行、数字续行标记、各优化目标优先级、
+排版→识读往返一致性，并以独立实现的记忆化 DP 为基准做随机对照（不同宽度、长短词、大小写与数字混合）。

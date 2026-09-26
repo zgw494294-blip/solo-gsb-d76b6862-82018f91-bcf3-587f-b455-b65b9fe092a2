@@ -57,6 +57,29 @@ main {
   gap: 20px;
 }
 
+/* 视图切换 */
+.tabs { display: flex; gap: 10px; justify-content: center; }
+.tab {
+  border: 1px solid var(--cell-border);
+  background: #f6f1e6;
+  color: var(--ink);
+  padding: 9px 26px;
+  border-radius: 999px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background .12s;
+}
+.tab:hover { background: #efe7d6; }
+.tab.active {
+  background: var(--accent);
+  border-color: var(--accent-dark);
+  color: #fff8ec;
+  font-weight: 600;
+}
+
+.view { display: flex; flex-direction: column; gap: 20px; }
+.view[hidden] { display: none; }
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -314,6 +337,25 @@ button.primary:hover { background: var(--accent-dark); }
 .rules ul { margin: 8px 0 0; padding-left: 22px; }
 .rules li { font-size: 13.5px; margin: 5px 0; color: #4a443b; }
 
+/* 盲文识读视图 */
+textarea.braille-input {
+  font-size: 20px;
+  letter-spacing: 3px;
+  line-height: 1.9;
+}
+
+.decode-output {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffefa;
+  font: 16px/1.9 ui-monospace, "SFMono-Regular", Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  min-height: 64px;
+}
+
 .site-footer {
   text-align: center;
   color: var(--muted);
@@ -327,7 +369,7 @@ button.primary:hover { background: var(--accent-dark); }
 }
 
 @media print {
-  .input-panel, .rules, .site-footer, .panel-head .buttons, .legend { display: none; }
+  .input-panel, .rules, .site-footer, .panel-head .buttons, .legend, .tabs { display: none; }
   .panel { box-shadow: none; border: none; }
   body { background: #fff; }
 }

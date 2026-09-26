@@ -60,3 +60,42 @@ def test_typeset_too_long():
     resp = client.post("/api/typeset", json={"text": "a" * 501, "width": 10})
     assert resp.status_code == 422
     assert resp.json()["errors"][0]["code"] == "too_long"
+
+
+def test_decode_ok():
+    resp = client.post("/api/decode", json={"text": "⠠⠓⠑⠇⠇⠕⠀⠼⠃⠚⠃⠋"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["text"] == "Hello 2026"
+    assert data["cells"] == 12
+
+
+def test_decode_error_located_and_no_partial_text():
+    resp = client.post("/api/decode", json={"text": "⠁⠃\n⠿"})
+    assert resp.status_code == 422
+    data = resp.json()
+    assert data["ok"] is False
+    assert "text" not in data  # 不输出部分解读文本
+    err = data["errors"][0]
+    assert err["code"] == "undefined_cell"
+    assert (err["line"], err["col"]) == (2, 1)
+
+
+def test_decode_bad_digit_continuation():
+    resp = client.post("/api/decode", json={"text": "⠼⠁⠤\n⠃"})
+    assert resp.status_code == 422
+    codes = {e["code"] for e in resp.json()["errors"]}
+    assert "bad_digit_continuation" in codes
+
+
+def test_decode_missing_field():
+    resp = client.post("/api/decode", json={})
+    assert resp.status_code == 422
+    assert resp.json()["ok"] is False
+
+
+def test_decode_too_long():
+    resp = client.post("/api/decode", json={"text": "⠁" * 501})
+    assert resp.status_code == 422
+    assert resp.json()["errors"][0]["code"] == "too_long"

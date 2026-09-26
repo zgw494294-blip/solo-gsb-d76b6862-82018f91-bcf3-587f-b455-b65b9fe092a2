@@ -48,7 +48,7 @@ LETTER_DOTS: dict[str, frozenset[int]] = {
 }
 
 # 数字：1～9、0 对应 a～i、j
-_DIGIT_LETTER = {
+DIGIT_LETTER = {
     "1": "a", "2": "b", "3": "c", "4": "d", "5": "e",
     "6": "f", "7": "g", "8": "h", "9": "i", "0": "j",
 }
@@ -88,7 +88,7 @@ class ValidationError(Exception):
         self.errors = errors
 
 
-def _line_col(text: str, pos: int) -> tuple[int, int]:
+def line_col(text: str, pos: int) -> tuple[int, int]:
     """0 基偏移 -> 1 基 (行号, 列号)。"""
     line = text.count("\n", 0, pos) + 1
     last_nl = text.rfind("\n", 0, pos)
@@ -144,7 +144,7 @@ def validate(text: str, width) -> None:
         has_alpha = any(c.isalpha() for c in word)
         has_digit = any(c.isdigit() for c in word)
         if has_alpha and has_digit:
-            line, col = _line_col(text, wstart)
+            line, col = line_col(text, wstart)
             errors.append({
                 "code": "mixed_word",
                 "pos": wstart,
@@ -161,7 +161,7 @@ def validate(text: str, width) -> None:
 
 
 def _illegal_error(text: str, s: int, e: int) -> dict:
-    line, col = _line_col(text, s)
+    line, col = line_col(text, s)
     sample = text[s:e]
     if len(sample) > 10:
         sample = sample[:10] + "…"
@@ -226,7 +226,7 @@ def build_words(source: str) -> list[str | Word]:
             words.append(Word("alpha", chars, word_text))
         else:
             chars = [
-                CharItem(c, LETTER_DOTS[_DIGIT_LETTER[c]])
+                CharItem(c, LETTER_DOTS[DIGIT_LETTER[c]])
                 for c in word_text
             ]
             words.append(Word("digit", chars, word_text))
@@ -485,7 +485,7 @@ def render_paragraph(atoms: list[tuple], records: list[dict]) -> tuple[list[Laid
                         "capital", CAPITAL_CELL, CAPITAL_DOTS, "大写标记（点 6）",
                     ))
                 if word.kind == "digit":
-                    note = f"数字 {ch.char}（借字母 {_DIGIT_LETTER[ch.char]} 的点位）"
+                    note = f"数字 {ch.char}（借字母 {DIGIT_LETTER[ch.char]} 的点位）"
                 else:
                     note = f"字母 {ch.char}"
                 cells.append(_cell(

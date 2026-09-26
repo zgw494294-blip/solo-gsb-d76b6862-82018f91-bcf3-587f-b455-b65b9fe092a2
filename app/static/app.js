@@ -3,6 +3,62 @@
 
 const $ = (sel) => document.querySelector(sel);
 
+/* ---------------- 视图切换 ---------------- */
+
+document.querySelectorAll(".tab").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach((b) => {
+      b.classList.toggle("active", b === btn);
+    });
+    $("#view-typeset").hidden = btn.dataset.view !== "typeset";
+    $("#view-decode").hidden = btn.dataset.view !== "decode";
+  });
+});
+
+/* ---------------- 共用：错误展示与复制 ---------------- */
+
+function showErrors(box, panel, input, errors) {
+  panel.hidden = true;
+  box.innerHTML = "";
+  const h = document.createElement("h3");
+  h.textContent = `发现 ${errors.length} 处问题，请修正后重试：`;
+  box.appendChild(h);
+  const ul = document.createElement("ul");
+  for (const err of errors) {
+    const li = document.createElement("li");
+    li.textContent = err.message;
+    if (typeof err.pos === "number") {
+      li.title = "点击定位到输入位置";
+      li.addEventListener("click", () => {
+        input.focus();
+        input.setSelectionRange(err.pos, err.pos + (err.length || 1));
+      });
+    }
+    ul.appendChild(li);
+  }
+  box.appendChild(ul);
+  box.hidden = false;
+}
+
+async function copyText(btn, text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    const old = btn.textContent;
+    btn.textContent = "已复制 ✓";
+    setTimeout(() => (btn.textContent = old), 1500);
+  } catch (e) {
+    // 退化方案
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+}
+
+/* ---------------- 盲文排版视图 ---------------- */
+
 const els = {
   input: $("#srcInput"),
   width: $("#widthInput"),
@@ -47,7 +103,7 @@ async function doTypeset() {
     local.push("每行格数须为 10～40 的整数。");
   }
   if (local.length) {
-    showErrors([{ message: local.join("\n") }]);
+    showErrors(els.errors, els.panel, els.input, [{ message: local.join("\n") }]);
     return;
   }
 
@@ -60,39 +116,17 @@ async function doTypeset() {
     });
     const data = await resp.json();
     if (!resp.ok || data.ok === false) {
-      showErrors(data.errors || [{ message: "排版失败。" }]);
+      showErrors(els.errors, els.panel, els.input,
+        data.errors || [{ message: "排版失败。" }]);
       return;
     }
     els.errors.hidden = true;
     renderResult(data);
   } catch (e) {
-    showErrors([{ message: "请求失败：" + e }]);
+    showErrors(els.errors, els.panel, els.input, [{ message: "请求失败：" + e }]);
   } finally {
     els.btn.disabled = false;
   }
-}
-
-function showErrors(errors) {
-  els.panel.hidden = true;
-  els.errors.innerHTML = "";
-  const h = document.createElement("h3");
-  h.textContent = `发现 ${errors.length} 处问题，请修正后重试：`;
-  els.errors.appendChild(h);
-  const ul = document.createElement("ul");
-  for (const err of errors) {
-    const li = document.createElement("li");
-    li.textContent = err.message;
-    if (typeof err.pos === "number") {
-      li.title = "点击定位到输入位置";
-      li.addEventListener("click", () => {
-        els.input.focus();
-        els.input.setSelectionRange(err.pos, err.pos + (err.length || 1));
-      });
-    }
-    ul.appendChild(li);
-  }
-  els.errors.appendChild(ul);
-  els.errors.hidden = false;
 }
 
 /* ---------------- 渲染盲文格 ---------------- */
@@ -217,28 +251,11 @@ function downloadBraille() {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-async function copyBraille() {
-  if (!lastResult) return;
-  const btn = els.copy;
-  try {
-    await navigator.clipboard.writeText(lastResult.braille_text);
-    const old = btn.textContent;
-    btn.textContent = "已复制 ✓";
-    setTimeout(() => (btn.textContent = old), 1500);
-  } catch (e) {
-    // 退化方案
-    const ta = document.createElement("textarea");
-    ta.value = lastResult.braille_text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand("copy");
-    ta.remove();
-  }
-}
-
 els.btn.addEventListener("click", doTypeset);
 els.download.addEventListener("click", downloadBraille);
-els.copy.addEventListener("click", copyBraille);
+els.copy.addEventListener("click", () => {
+  if (lastResult) copyText(els.copy, lastResult.braille_text);
+});
 
 els.btnClear.addEventListener("click", () => {
   els.input.value = "";
@@ -266,3 +283,110 @@ els.input.addEventListener("keydown", (e) => {
 });
 
 updateCount();
+
+/* ---------------- 盲文识读视图 ---------------- */
+
+const dec = {
+  input: $("#decInput"),
+  count: $("#decCellCount"),
+  btn: $("#btnDecode"),
+  btnSample: $("#btnDecSample"),
+  btnClear: $("#btnDecClear"),
+  errors: $("#decErrorBox"),
+  panel: $("#decResultPanel"),
+  stats: $("#decStatsBar"),
+  output: $("#decOutput"),
+  copy: $("#btnDecCopy"),
+};
+
+let lastDecode = null;
+
+// 计数只算盲文格（U+2800～U+28FF），换行不占格
+const countCells = (s) => (s.match(/[\u2800-\u28FF]/g) || []).length;
+function updateDecCount() {
+  const n = countCells(dec.input.value);
+  dec.count.textContent = String(n);
+  dec.count.parentElement.classList.toggle("over", n > 500);
+}
+
+dec.input.addEventListener("input", updateDecCount);
+
+async function doDecode() {
+  const text = dec.input.value;
+
+  // 前端即时校验（最终以服务端为准）
+  const local = [];
+  if (!text) local.push("请输入盲文。");
+  if (countCells(text) > 500) local.push("盲文超过 500 格。");
+  if (/[^\u2800-\u28FF\n\r]/.test(text)) {
+    local.push("含非法字符：仅允许 Unicode 六点盲文、盲文空格（U+2800）与换行。");
+  }
+  if (local.length) {
+    showErrors(dec.errors, dec.panel, dec.input, [{ message: local.join("\n") }]);
+    return;
+  }
+
+  dec.btn.disabled = true;
+  try {
+    const resp = await fetch("/api/decode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.ok === false) {
+      showErrors(dec.errors, dec.panel, dec.input,
+        data.errors || [{ message: "识读失败。" }]);
+      return;
+    }
+    dec.errors.hidden = true;
+    renderDecode(data);
+  } catch (e) {
+    showErrors(dec.errors, dec.panel, dec.input, [{ message: "请求失败：" + e }]);
+  } finally {
+    dec.btn.disabled = false;
+  }
+}
+
+function renderDecode(r) {
+  lastDecode = r;
+  dec.panel.hidden = false;
+  dec.stats.innerHTML = [
+    `盲文 <b>${r.cells}</b> 格`,
+    `结果 <b>${r.chars}</b> 字符`,
+    `共 <b>${r.lines}</b> 行`,
+  ].map((s) => `<span>${s}</span>`).join("");
+  dec.output.textContent = r.text;
+  dec.panel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+dec.btn.addEventListener("click", doDecode);
+dec.copy.addEventListener("click", () => {
+  if (lastDecode) copyText(dec.copy, lastDecode.text);
+});
+
+dec.btnClear.addEventListener("click", () => {
+  dec.input.value = "";
+  updateDecCount();
+  dec.errors.hidden = true;
+  dec.panel.hidden = true;
+  dec.input.focus();
+});
+
+dec.btnSample.addEventListener("click", () => {
+  dec.input.value =
+`⠠⠓⠑⠇⠇⠕⠀⠠⠃⠗⠁⠊⠇⠇⠑
+⠼⠃⠚⠃⠋⠀⠁⠃⠉⠙⠑⠤
+⠋⠛⠓`;
+  updateDecCount();
+  doDecode();
+});
+
+dec.input.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+    e.preventDefault();
+    doDecode();
+  }
+});
+
+updateDecCount();
