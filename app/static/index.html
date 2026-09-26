@@ -13,6 +13,12 @@
 </header>
 
 <main>
+  <nav class="view-tabs" id="viewTabs">
+    <button type="button" class="tab active" data-view="typeset">盲文排版</button>
+    <button type="button" class="tab" data-view="decode">盲文识读</button>
+  </nav>
+
+  <div class="view-wrap" id="viewTypeset">
   <section class="panel input-panel">
     <div class="panel-head">
       <h2>① 输入原文</h2>
@@ -67,6 +73,51 @@
       <li>动态规划依次最小化：<b>断词次数 → 行数 → 各行剩余格数平方和</b>；同分时取断点序列字典序最小者。</li>
     </ul>
   </section>
+  </div>
+
+  <div class="view-wrap" id="viewDecode" hidden>
+  <section class="panel input-panel">
+    <div class="panel-head">
+      <h2>① 粘贴盲文</h2>
+      <span class="counter"><span id="brCount">0</span> / 500 格</span>
+    </div>
+    <textarea id="brInput" rows="6" maxlength="500" spellcheck="false"
+      placeholder="粘贴 Unicode 六点盲文（U+2800 起），允许盲文空格 ⠀ 与换行；最多 500 格。"></textarea>
+
+    <div class="controls">
+      <span class="hint">解读为 ASCII 字母、数字、空格与换行</span>
+      <div class="buttons">
+        <button type="button" id="btnDecode" class="primary">识读（Ctrl+Enter）</button>
+        <button type="button" id="btnDecodeSample">示例</button>
+        <button type="button" id="btnDecodeClear">清空</button>
+      </div>
+    </div>
+
+    <div id="decodeErrorBox" class="error-box" hidden></div>
+  </section>
+
+  <section class="panel result-panel" id="decodePanel" hidden>
+    <div class="panel-head">
+      <h2>② 识读结果</h2>
+      <div class="buttons">
+        <button type="button" id="btnDecodeCopy">复制结果</button>
+      </div>
+    </div>
+
+    <div class="stats" id="decodeStats"></div>
+    <textarea id="decodeOutput" class="decode-output" rows="8" readonly spellcheck="false"></textarea>
+  </section>
+
+  <section class="panel rules">
+    <h2>识读规则</h2>
+    <ul>
+      <li>沿用英语一级字母点位；<b>⠠</b>（点 6）只把紧随的<b>一个</b>字母转为大写。</li>
+      <li><b>⠼</b>（点 3456）使后续 a～i、j 点位读作 <b>1～9、0</b>；数字状态到<b>词间格或普通换行</b>结束。</li>
+      <li><b>⠤</b>（点 36）仅作行尾断词标记：去掉该格及其后的换行并接续同一词；<b>数字词续行须以 ⠼ 重新起始</b>。普通换行保留。</li>
+      <li>孤立标记、未定义点位、行内连字符及不合法的数字续行会定位到<b>行、列</b>报错，且不输出任何解读文本。</li>
+    </ul>
+  </section>
+  </div>
 </main>
 
 <footer class="site-footer">Python · FastAPI · 原生 HTML/CSS/JavaScript — 本地离线应用</footer>

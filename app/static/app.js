@@ -266,3 +266,150 @@ els.input.addEventListener("keydown", (e) => {
 });
 
 updateCount();
+
+/* =======================================================================
+ * 视图二：盲文识读
+ * ===================================================================== */
+
+const elsD = {
+  input: $("#brInput"),
+  count: $("#brCount"),
+  btn: $("#btnDecode"),
+  btnSample: $("#btnDecodeSample"),
+  btnClear: $("#btnDecodeClear"),
+  errors: $("#decodeErrorBox"),
+  panel: $("#decodePanel"),
+  output: $("#decodeOutput"),
+  stats: $("#decodeStats"),
+  copy: $("#btnDecodeCopy"),
+};
+
+let lastDecoded = null;
+
+function updateBrCount() {
+  const n = elsD.input.value.length;
+  elsD.count.textContent = String(n);
+  elsD.count.parentElement.classList.toggle("over", n > 500);
+}
+elsD.input.addEventListener("input", updateBrCount);
+
+function showDecodeErrors(errors) {
+  elsD.panel.hidden = true;
+  elsD.errors.innerHTML = "";
+  const h = document.createElement("h3");
+  h.textContent = `发现 ${errors.length} 处问题，请修正后重试：`;
+  elsD.errors.appendChild(h);
+  const ul = document.createElement("ul");
+  for (const err of errors) {
+    const li = document.createElement("li");
+    li.textContent = err.message;
+    if (typeof err.pos === "number") {
+      li.title = "点击定位到输入位置";
+      li.addEventListener("click", () => {
+        elsD.input.focus();
+        elsD.input.setSelectionRange(err.pos, err.pos + (err.length || 1));
+      });
+    }
+    ul.appendChild(li);
+  }
+  elsD.errors.appendChild(ul);
+  elsD.errors.hidden = false;
+}
+
+async function doDecode() {
+  const braille = elsD.input.value;
+  const local = [];
+  if (braille.length > 500) local.push("输入超过 500 格。");
+  if (!braille) local.push("请输入至少一个盲文字母或数字格。");
+  if (local.length) {
+    showDecodeErrors([{ message: local.join("\n") }]);
+    return;
+  }
+
+  elsD.btn.disabled = true;
+  try {
+    const resp = await fetch("/api/decode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ braille }),
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.ok === false) {
+      showDecodeErrors(data.errors || [{ message: "识读失败。" }]);
+      return;
+    }
+    elsD.errors.hidden = true;
+    lastDecoded = data;
+    elsD.output.value = data.text;
+    elsD.stats.innerHTML = [
+      `输入：<b>${data.stats.input_cells}</b> 格`,
+      `输出：<b>${data.stats.output_chars}</b> 个字符`,
+      `行数：<b>${data.stats.lines}</b>`,
+    ].map((s) => `<span>${s}</span>`).join("");
+    elsD.panel.hidden = false;
+    elsD.panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (e) {
+    showDecodeErrors([{ message: "请求失败：" + e }]);
+  } finally {
+    elsD.btn.disabled = false;
+  }
+}
+
+async function copyDecoded() {
+  if (!lastDecoded) return;
+  const btn = elsD.copy;
+  try {
+    await navigator.clipboard.writeText(lastDecoded.text);
+    const old = btn.textContent;
+    btn.textContent = "已复制 ✓";
+    setTimeout(() => (btn.textContent = old), 1500);
+  } catch (e) {
+    elsD.output.focus();
+    elsD.output.select();
+    document.execCommand("copy");
+  }
+}
+
+elsD.btn.addEventListener("click", doDecode);
+elsD.copy.addEventListener("click", copyDecoded);
+elsD.btnClear.addEventListener("click", () => {
+  elsD.input.value = "";
+  updateBrCount();
+  elsD.errors.hidden = true;
+  elsD.panel.hidden = true;
+  elsD.input.focus();
+});
+elsD.btnSample.addEventListener("click", () => {
+  // Hello 2026 / Worldfamous 1026（World- 与 10- 为行尾断词续行，10 续行重新加 ⠼）
+  const S = "⠀"; // 盲文空格 U+2800
+  elsD.input.value =
+    "⠠⠓⠑⠇⠇⠕" + S + "⠼⠃⠚⠃⠋\n" +
+    "⠠⠺⠕⠗⠇⠙⠤\n" +
+    "⠋⠁⠍⠕⠥⠎" + S + "⠼⠁⠚⠤\n" +
+    "⠼⠃⠋";
+  updateBrCount();
+  doDecode();
+});
+elsD.input.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+    e.preventDefault();
+    doDecode();
+  }
+});
+updateBrCount();
+
+/* ---------------- 视图切换 ---------------- */
+
+const tabs = document.querySelectorAll("#viewTabs .tab");
+const views = { typeset: $("#viewTypeset"), decode: $("#viewDecode") };
+
+function switchView(name) {
+  for (const tab of tabs) {
+    tab.classList.toggle("active", tab.dataset.view === name);
+  }
+  views.typeset.hidden = name !== "typeset";
+  views.decode.hidden = name !== "decode";
+}
+for (const tab of tabs) {
+  tab.addEventListener("click", () => switchView(tab.dataset.view));
+}

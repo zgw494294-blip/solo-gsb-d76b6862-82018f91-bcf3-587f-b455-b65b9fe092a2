@@ -1,7 +1,8 @@
 # 六点盲文排版台
 
-本地运行的英语一级（Grade 1）六点盲文转写与排版 Web 应用。
+本地运行的英语一级（Grade 1）六点盲文转写、排版与**识读** Web 应用。
 Python / FastAPI 后端 + 原生 HTML/CSS/JavaScript 前端，**无需外网、无前端构建步骤**。
+页面顶部可在「盲文排版」与「盲文识读」两个视图间切换。
 
 ## 一条命令启动
 
@@ -54,11 +55,32 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 - **页面**：原文行与盲文格逐行对照；每格显示六点矩阵、盲文字符与说明（悬停查看点位）；
   显示每行用格/余格、断词与数字续行统计；支持**下载 Unicode 盲文 `.txt`**、一键复制。
 
+## 盲文识读视图（反向解读）
+
+- **输入约束**
+  - 不超过 **500 格** Unicode 六点盲文（U+2800 区段），允许盲文空格 U+2800 与换行；
+  - 至少包含一个盲文字母（或数字）格；`CRLF/CR` 统一按换行处理；
+  - 非盲文字符、七点/八点盲文格、标点等未定义点位会**定位到行、列**报错，
+    点击错误可跳转到输入位置。
+- **解读规则**
+  - 沿用排版视图的一级字母点位；
+  - **⠠（点 6）只将紧随的一个字母转为大写**；
+  - **⠼（点 3456）**使后续 a～i、j 点位分别读作 **1～9、0**，
+    数字状态到**词间格（U+2800）或普通换行**结束；
+  - **⠤（点 36）仅作行尾断词标记**：去掉该格及其后的换行并接续同一词；
+    **数字词续行须以 ⠼ 重新起始**；
+  - 普通换行在结果中保留；每个盲文空格解读为一个 ASCII 空格。
+- **错误类型**（任一出现即整体失败，**不输出部分解读文本**）：
+  孤立标记（`isolated_mark`）、未定义点位（`undefined_cell`）、
+  行内连字符（`inline_hyphen`）、不合法数字续行（`bad_number_continuation`）、
+  非盲文字符（`illegal_char`）等，均带盲文原文的行/列定位。
+
 ## API
 
 | 方法 | 路径 | 说明 |
 | ---- | ---- | ---- |
 | `POST` | `/api/typeset` | 请求体 `{"text": "...", "width": 20}`，返回排版结果；输入非法时 HTTP 422，`errors` 含行/列定位 |
+| `POST` | `/api/decode` | 请求体 `{"braille": "⠠⠓⠊"}`，返回 `{"text": "Hi", "stats": {...}}`；盲文非法时 HTTP 422，`errors` 含盲文行/列定位，且不返回 `text` |
 | `GET` | `/api/health` | 健康检查 |
 
 例：
@@ -67,6 +89,10 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 curl -s -X POST http://localhost:8000/api/typeset \
   -H 'Content-Type: application/json' \
   -d '{"text":"Hello 2026","width":16}'
+
+curl -s -X POST http://localhost:8000/api/decode \
+  -H 'Content-Type: application/json' \
+  -d '{"braille":"⠠⠓⠑⠇⠇⠕⠀⠼⠃⠚⠃⠋"}'
 ```
 
 ## 离线说明
@@ -81,14 +107,17 @@ curl -s -X POST http://localhost:8000/api/typeset \
 .
 ├── app
 │   ├── __init__.py
-│   ├── main.py            # FastAPI：接口与静态托管
+│   ├── main.py            # FastAPI：接口（排版 / 识读）与静态托管
 │   ├── braille.py         # 校验、转写与动态规划排版引擎
+│   ├── reader.py          # 盲文识读引擎（Unicode 盲文 -> ASCII）
 │   └── static
-│       ├── index.html     # 页面结构
+│       ├── index.html     # 页面结构（排版 / 识读两个视图）
 │       ├── style.css      # 样式（盲文格六点矩阵）
 │       └── app.js         # 前端交互（原生 JS）
 ├── tests
-│   └── test_braille.py    # 引擎测试（含与独立 DP 的随机对照）
+│   ├── test_braille.py    # 排版引擎测试（含与独立 DP 的随机对照）
+│   ├── test_reader.py     # 识读引擎测试（含与排版结果的往返对照）
+│   └── test_api.py        # FastAPI 接口层测试
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt

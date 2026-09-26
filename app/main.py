@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .braille import ValidationError, typeset
+from .reader import MAX_CELLS, decode
 
 app = FastAPI(title="六点盲文排版台", version="1.0.0")
 
@@ -18,6 +19,13 @@ class TypesetIn(BaseModel):
     # 这里仅约束基本类型。
     text: str = Field(..., description="ASCII 字母、数字、空格与换行，不超过 500 字符")
     width: int = Field(..., description="每行 10～40 格")
+
+
+class DecodeIn(BaseModel):
+    braille: str = Field(
+        ...,
+        description=f"Unicode 六点盲文格（允许盲文空格与换行），不超过 {MAX_CELLS} 格",
+    )
 
 
 @app.exception_handler(RequestValidationError)
@@ -37,6 +45,17 @@ async def _on_validation_error(_request: Request, exc: RequestValidationError):
 def api_typeset(payload: TypesetIn):
     try:
         result = typeset(payload.text, payload.width)
+    except ValidationError as exc:
+        return JSONResponse(status_code=422, content={"ok": False, "errors": exc.errors})
+    result["ok"] = True
+    return result
+
+
+@app.post("/api/decode")
+def api_decode(payload: DecodeIn):
+    """盲文识读：Unicode 六点盲文 -> ASCII 字母、数字、空格与换行。"""
+    try:
+        result = decode(payload.braille)
     except ValidationError as exc:
         return JSONResponse(status_code=422, content={"ok": False, "errors": exc.errors})
     result["ok"] = True

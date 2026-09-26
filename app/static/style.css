@@ -57,6 +57,36 @@ main {
   gap: 20px;
 }
 
+/* 视图切换 */
+.view-tabs { display: flex; gap: 8px; }
+.tab {
+  border: 1px solid var(--cell-border);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  background: #ece5d6;
+  color: var(--muted);
+  padding: 10px 22px;
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: -1px;
+}
+.tab:hover { background: #e4dbc7; }
+.tab.active {
+  background: var(--panel);
+  color: var(--accent-dark);
+  border-color: var(--line);
+  box-shadow: 0 -2px 6px rgba(70, 55, 30, 0.05);
+  cursor: default;
+}
+.view-wrap { display: contents; }
+
+.decode-output {
+  min-height: 120px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #fffefb;
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -327,7 +357,7 @@ button.primary:hover { background: var(--accent-dark); }
 }
 
 @media print {
-  .input-panel, .rules, .site-footer, .panel-head .buttons, .legend { display: none; }
+  .view-tabs, .input-panel, .rules, .site-footer, .panel-head .buttons, .legend { display: none; }
   .panel { box-shadow: none; border: none; }
   body { background: #fff; }
 }
