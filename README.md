@@ -1,0 +1,106 @@
+# 六点盲文排版台
+
+本地运行的英语一级（Grade 1）六点盲文转写与排版 Web 应用。
+Python / FastAPI 后端 + 原生 HTML/CSS/JavaScript 前端，**无需外网、无前端构建步骤**。
+
+## 一条命令启动
+
+需要已安装 Docker 与 Docker Compose（v2）。
+
+```bash
+docker compose up --build
+```
+
+启动后用浏览器访问：
+
+> **http://localhost:8000**
+
+停止：在终端按 `Ctrl+C`；后台方式可用 `docker compose up -d --build` 与 `docker compose down`。
+
+端口被占用时，编辑 `docker-compose.yml` 中 `"8000:8000"` 的左侧端口即可（例如 `"18000:8000"`）。
+
+## 不用 Docker 时（本地 Python 直跑）
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+同样访问 http://localhost:8000 。
+
+## 功能与转写规则
+
+- **输入约束**
+  - 不超过 500 个 ASCII 字符：仅字母、数字、空格、换行；
+  - 至少包含一个字母或数字；
+  - 每个词只能全为字母或全为数字，非法字符与字母数字混写词会**定位到行、列**报错（点击错误可跳转到输入位置）；
+  - 换行是**硬分段**；连续空格合并为**一个词间格**。
+- **盲文转写（英语一级六点盲文）**
+  - 点位编号：左列自上而下为点 1、2、3，右列为点 4、5、6；
+  - 每个大写字母前加 **点 6** 大写标记；
+  - 数字词以 **点 3456** 数字标记开头，数字 1～9、0 分别借用 a～i、j 的点位；
+  - 输出使用 Unicode 盲文图案（U+2800 区段），词间使用 U+2800 空白盲文格。
+- **排版**
+  - 每行格数可设 10～40；
+  - 词间格占 1 格；行首、行尾不留空格；
+  - 普通词不在词内断行，**仅超宽词**可在字符间断开；断词行尾加 **点 36** 连字符；
+  - 数字词跨行使，续行**重新加数字标记**；
+  - 动态规划按以下顺序取最优：
+    1. 断词次数最少；
+    2. 行数最少；
+    3. 各行剩余格数的平方和最小；
+    4. 以上全相同时，取断点序列字典序最小者。
+- **页面**：原文行与盲文格逐行对照；每格显示六点矩阵、盲文字符与说明（悬停查看点位）；
+  显示每行用格/余格、断词与数字续行统计；支持**下载 Unicode 盲文 `.txt`**、一键复制。
+
+## API
+
+| 方法 | 路径 | 说明 |
+| ---- | ---- | ---- |
+| `POST` | `/api/typeset` | 请求体 `{"text": "...", "width": 20}`，返回排版结果；输入非法时 HTTP 422，`errors` 含行/列定位 |
+| `GET` | `/api/health` | 健康检查 |
+
+例：
+
+```bash
+curl -s -X POST http://localhost:8000/api/typeset \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Hello 2026","width":16}'
+```
+
+## 离线说明
+
+镜像基于 `python:3.11-slim`，仅在**构建镜像时**从 PyPI 拉取三个 Python 依赖；
+运行后所有资源（HTML/CSS/JS、字体回退均使用系统字体）均由本服务自身提供，
+不访问任何 CDN 或外部服务，可在断网环境中使用。
+
+## 项目结构
+
+```
+.
+├── app
+│   ├── __init__.py
+│   ├── main.py            # FastAPI：接口与静态托管
+│   ├── braille.py         # 校验、转写与动态规划排版引擎
+│   └── static
+│       ├── index.html     # 页面结构
+│       ├── style.css      # 样式（盲文格六点矩阵）
+│       └── app.js         # 前端交互（原生 JS）
+├── tests
+│   └── test_braille.py    # 引擎测试（含与独立 DP 的随机对照）
+├── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+└── README.md
+```
+
+## 测试
+
+```bash
+pip install pytest
+python3 -m pytest tests/ -q
+```
+
+测试覆盖转写规则、报错定位、超宽词断行、数字续行标记、各优化目标优先级，
+并以独立实现的记忆化 DP 为基准做随机对照（不同宽度、长短词、大小写与数字混合）。
